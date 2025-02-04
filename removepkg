@@ -1,0 +1,71 @@
+#! /bin/sh
+#set -x
+
+REMOVE_PKG() {
+ RMV=$1
+ while IFS= read rmfile ; do
+ if [ -f "${REMOVE_DIR}${rmfile}" ] ; then
+   rm "${REMOVE_DIR}$rmfile" 2> /dev/null 1> /dev/null && echo "Deleted: $rmfile"
+ elif [ -L "${REMOVE_DIR}${rmfile}" ] ; then
+  unlink "${REMOVE_DIR}$rmfile" 2> /dev/null 1> /dev/null
+ fi
+ done < "$RMV"
+
+ while IFS= read dirrm ; do
+  rmdir "${REMOVE_DIR}$dirrm" 1> /dev/null 2> /dev/null
+ done < "$RMV"
+rm $RMV
+}
+
+HELP(){
+cat << EOF
+removepkg [opcoes] pacote
+-r, remove  Remove pacote
+-h, help    Menu de ajuda
+EOF
+}
+
+TRACK='/var/log/installed/'
+#[ -z "$1" ] && { printf '%b' "Informar nome de pacote para remocao!\n" ; exit 1 ; }
+case $1 in
+ -r|remove)
+  shift
+ while [ -n $1 ] ; do
+  if [ "$1" = "fake" ] || [ "$1" = "-f" ] ; then
+   shift
+   if [ -d "$1" ] ; then
+    REMOVE_DIR="$1"
+    shift
+    break
+   else
+    printf '%b' "Diretorio $1 nao exite!\nAbortando...\n"
+    exit 1
+   fi
+  else
+    break
+  fi
+ shift
+ done
+ cd "${REMOVE_DIR}${TRACK}"
+ while [ -n "$1" ] ; do
+  [ -z "$1" ] && { printf '%b' "Pacote $1 nao econtrado!\n" ; exit 1 ;}
+  count='0'
+  for pack in *; do
+   if echo "$pack" | grep -qw "$1" 1> /dev/null 2> /dev/null; then
+    RM_PKG=$pack
+    REMOVE_PKG "$RM_PKG"
+    count=$((count + 1))
+    shift
+   fi
+  done
+  [ "$count" -lt '1' ] && { printf '%b' "Nao encontrado -> $1 \n" ; shift ; continue ;}
+ done
+  ;;
+ -h|help)
+   HELP
+   exit 0
+   ;;
+  *)
+   printf '%b' "Opcao invalida!\nDigite removepkg -h ou removepkg help para mais informacoes\n"
+   ;;
+ esac

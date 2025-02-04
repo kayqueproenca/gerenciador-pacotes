@@ -1,0 +1,95 @@
+#! /bin/sh
+#set -x
+TRACK="/var/log/installed"
+OLD_PWD=$PWD
+
+CHECK() {
+  NAME_PKG=$1
+  NAME_CORE=$(basename $NAME_PKG .kpm)
+  for PACK in * ; do
+   if echo "$PACK" | grep -qw "$NAME_CORE" ; then
+    printf '%b' "Programa ${NAME_CORE} ja esta instalado na versao\n"
+    exit 0
+   fi
+  done
+}
+
+UPDATE() {
+  NAME_PKG=$1
+  NAME_CORE=$(basename $NAME_PKG .kpm)
+  REAL_NAME=$(echo $NAME_CORE | cut -d - -f1)
+  for PACK in *; do
+   if echo "$PACK" | grep -Eq "${REAL_NAME}*" ; then
+     OLD_NAME=$PACK
+     break
+   else
+    printf '%b' "Nao ha versao antiga instalada\nNecessario fazer primeira instalacao!\n"
+    exit 1
+   fi
+  done
+  OLD_PKG=$(basename $OLD_NAME .track)
+  OLD_VERSION=$(echo $OLD_PKG | cut -d - -f2 | sed 's/\.//')
+  OLD_BUILD=$(echo $OLD_PKG | cut -d - -f3)
+
+  NEW_VERSION=$(echo $NAME_CORE | cut -d - -f2 | sed 's/\.//')
+  NEW_BUILD=$(echo $NAME_CORE | cut -d - -f3)
+
+  if [ "$NEW_VERSION" -le "$OLD_VERSION" ] && [ "$NEW_BUILD" -le "$OLD_BUILD" ] ; then
+   echo "Para fazer um Downgrade, usar a opcao -d ou downgrade"
+   exit 1
+  else
+
+  while IFS= read rmfile ; do
+   if [ -f "$rmfile" ] ; then
+    rm "$rmfile" 2> /dev/null 1> /dev/null
+   elif [ -L "$rmfile" ] ; then
+   unlink "$rmfile" 2> /dev/null 1> /dev/null
+  fi
+  done < $OLD_NAME
+
+  while IF= read dirrm; do
+   rmdir "$dirrm"  2> /dev/null 1> /dev/null
+  done < $OLD_NAME
+  rm $OLD_NAME
+ fi
+
+  if tar -xvf "${OLD_PWD}/${NAME_PKG}" -C / > "${TRACK}/${NAME_CORE}.track"; then
+   sed -i 's/\.\//\//g' "${TRACK}/${NAME_CORE}.track"
+   printf '%b' "Fazendo atualizacao....\n"
+   sleep 2s
+  local TEMPDIR=$(mktemp -d)
+   if tar -tf "${OLD_PWD}/$NAME_PKG" "./info/pkginfo" 1> /dev/null 2>/dev/null ; then
+    if tar -xf "${OLD_PWD}/${NAME_PKG}" -C "${TEMPDIR}" "./info/pkginfo" ; then
+     . "${TEMPDIR}/info/pkginfo"
+     printf '%b' "=============================================\n"
+     printf '%b' "Pacote ${Name} atulizado com sucesso!\n"
+     printf '%b' "Versao antiga: $(echo $OLD_PKG | cut -d - -f2)\n"
+     printf '%b' "Versao atual: ${Version}\n"
+     printf '%b' "=============================================\n"
+     rm -rf $TEMPDIR
+    else
+     printf '%b' "Arquivo nao localizado!\n"
+     exit 1
+   fi
+   else
+     printf '%b' "Falha ao extrair arquivo pkginfo!\nAbortar...\n"
+     exit 1
+   fi
+   else
+    printf '%b' "Atualizacao falhou\n"
+    exit 1
+  fi
+ 
+}
+
+case $1 in  
+ -u|update)
+   shift
+   cd "$TRACK"
+   while [ -n "$1" ] ; do
+     CHECK $1
+     UPDATE $1
+     shift
+   done
+   ;;
+ esac

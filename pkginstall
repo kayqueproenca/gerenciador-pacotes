@@ -1,0 +1,100 @@
+#! /bin/sh
+#set -x
+export LC_ALL='C'
+export LANG='C'
+TRACK='/var/log/installed'
+
+INSTALL() {
+ [ ! -d "${INSTALL_DIR}${TRACK}" ] && mkdir -p -v "${INSTALL_DIR}${TRACK}"
+ local PKG=$1
+ if ! echo "$PKG" | grep -E ".kpm" ; then
+  printf '%b' "Extensao do pacote invalida!\nO formato deve ser '.kpm'\nAbortar...\n"
+  exit 1
+ fi
+ local BASE_PKG=$(basename $PKG .kpm)
+ if [ -f "${INSTALL_DIR}${TRACK}/${BASE_PKG}.track" ] ; then
+  printf '%b' "Programa ja instalado\nAbortar....\n"
+  exit 1
+ fi
+ echo "Iniciando a instalacao do $PKG"
+ if tar -xvf "${PWD}/${PKG}" -C "$INSTALL_DIR/"  > "${INSTALL_DIR}${TRACK}/${BASE_PKG}.track" ; then
+  printf '%b' "Pacote ${BASE_PKG} instalado com sucesso!\n"
+ else
+  printf '%b' "Erro na instalacao do pacote ${BASE_PKG}\n"
+  exit 1
+ fi
+
+ if sed -i 's/\.\//\//g; /^\/info\/$/d ; /^\/info\/pkginfo$/d' "${INSTALL_DIR}${TRACK}/${BASE_PKG}.track" ; then
+  printf '%b' "Gerado arquivo ${INSTALL_DIR}${TRACK}/${BASE_PKG}.track\n"
+  printf '%b' "\n"
+ else
+  printf '%b' "Houve erro na instalacao do ${BASE_PKG}\n"
+  exit 127
+ fi
+}
+
+DESC() {
+ local TEMPDIR=$(mktemp -d)
+ if tar -tf "$1" "./info/pkginfo" 1> /dev/null 2> /dev/null ; then
+  if tar -xf "$1" -C "${TEMPDIR}" "./info/pkginfo" ; then
+   . "${TEMPDIR}/info/pkginfo"
+   printf '%b' "====================================\n"
+   printf '%b' "Pacote: $Name \n"
+   printf '%b' "Maintainer: $Maintainer \n"
+   printf '%b' "Version: $Version \n"
+   printf '%b' "====================================\n"
+   rm -rf $TEMPDIR
+  fi
+ else
+  printf '%b' "Aquivo 'info/pkginfo' nao existe\n"
+  exit 1
+ fi
+}
+
+USAGE() {
+cat << EOF
+pkginstall [opcoes] pacote
+-i, install  Instala o pacote
+-f,fake      Instalar o pacote em outra raiz pkginstall -i -f /caminho/da/raiz pacote
+EOF
+}
+
+#[ ! -d "$TRACK" ] && mkdir -v $TRACK
+case $1 in
+ -i|install)
+   shift
+   while [ -n "$1" ] ; do
+    if [ "$1" = "fake" ] || [ "$1" = "-f" ] ; then
+    shift
+     if [ -d "$1" ] ; then
+      INSTALL_DIR="$1"
+      shift
+      break
+     else
+      printf '%b' "Diretorio $1 nao encontrado!\n"
+      exit 1
+     fi
+    else
+     break
+    fi
+   shift
+   done
+   while [ -n "$1" ] ; do
+    if [ -e "$1" ] ; then
+     DESC "$1"
+     INSTALL "$1"
+     #continue
+    else
+     echo "Pacote $1 nao existe"
+     shift
+     continue
+   fi
+   shift
+  done ;;
+ -h|help)
+    USAGE ;;
+ *)
+    printf '%b' "Opcao informada invalida!\n"
+    USAGE
+    ;;
+esac
